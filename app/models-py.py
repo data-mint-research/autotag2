@@ -21,7 +21,7 @@ class CLIPModel:
         self.preprocess = None
         self.tokenizer = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model_path = "/app/models/clip_vit_b32.pth"
+        self.model_path = "/app/models/clip/clip_vit_b32.pth"
         self.model_architecture = "ViT-B-32"
         self.initialized = False
     
@@ -108,7 +108,7 @@ class YOLOModel:
         """Initialize YOLOv8 model"""
         self.model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model_path = "/app/models/yolov8n.pt"
+        self.model_path = "/app/models/yolov8/yolov8n.pt"
         self.initialized = False
         self.min_person_height = 40  # Minimum height for detecting a person
     

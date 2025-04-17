@@ -14,13 +14,13 @@ hardware:
 # Model Settings
 models:
   clip:
-    path: '/app/models/clip_vit_b32.pth'
+    path: '/app/models/clip/clip_vit_b32.pth'
     architecture: 'ViT-B-32'
   yolo:
-    path: '/app/models/yolov8n.pt'
+    path: '/app/models/yolov8/yolov8n.pt'
     min_person_height: 40
   facenet:
-    path: '/app/models/facenet_model.pth'
+    path: '/app/models/facenet/facenet_model.pth'
 
 # Tagging Settings
 tagging:
