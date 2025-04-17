@@ -22,6 +22,8 @@ _processing_status = {
     "start_time": 0,
     "current_file": "",
     "eta_seconds": 0,
+    "output_files": [],
+    "save_mode": "replace"
 }
 _status_lock = threading.Lock()
 
@@ -75,8 +77,15 @@ def find_images(folder_path: str, recursive: bool = False) -> List[str]:
     
     return image_files
 
-def batch_process_folder(folder_path: str, recursive: bool = False):
-    """Process all images in a folder"""
+def batch_process_folder(folder_path: str, recursive: bool = False, save_mode: str = "replace"):
+    """
+    Process all images in a folder
+    
+    Args:
+        folder_path: Path to the folder containing images
+        recursive: Whether to process subfolders recursively
+        save_mode: How to save the tagged files - "replace" (overwrite originals) or "suffix" (create new files)
+    """
     global _processing_status
     
     with _status_lock:
@@ -90,6 +99,8 @@ def batch_process_folder(folder_path: str, recursive: bool = False):
         _processing_status["start_time"] = time.time()
         _processing_status["current_file"] = ""
         _processing_status["eta_seconds"] = 0
+        _processing_status["save_mode"] = save_mode
+        _processing_status["output_files"] = []
     
     try:
         # Find all images
@@ -118,12 +129,14 @@ def batch_process_folder(folder_path: str, recursive: bool = False):
             # Write tags if successful
             if result["success"]:
                 tags = result["tags"]
-                tag_success = write_tags_to_file(image_file, tags)
+                tag_success, output_path = write_tags_to_file(image_file, tags, save_mode=save_mode)
                 
                 with _status_lock:
                     _processing_status["processed_files"] += 1
                     if tag_success:
                         _processing_status["successful_files"] += 1
+                        # Store output path in status
+                        _processing_status["output_files"].append(output_path)
                     else:
                         _processing_status["failed_files"] += 1
             else:

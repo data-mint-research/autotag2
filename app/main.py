@@ -21,9 +21,7 @@ logger = logging.getLogger('auto-tag')
 with open('config.yml', 'r') as f:
     config = yaml.safe_load(f)
 
-# Create necessary directories
-os.makedirs(config['paths']['input_folder'], exist_ok=True)
-os.makedirs(config['paths']['output_folder'], exist_ok=True)
+# Initialize environment
 
 # Initialize FastAPI app
 app = FastAPI(title="AUTO-TAG API", description="AI-powered image tagging system")
@@ -32,10 +30,26 @@ app = FastAPI(title="AUTO-TAG API", description="AI-powered image tagging system
 setup_environment()
 
 @app.post("/process/image")
-async def process_single_image(file: UploadFile = File(...), tag_mode: str = "append"):
-    """Process a single image and return the generated tags"""
-    # Save uploaded file
-    input_path = os.path.join(config['paths']['input_folder'], file.filename)
+async def process_single_image(
+    file: UploadFile = File(...),
+    tag_mode: str = "append",
+    save_mode: str = "replace"
+):
+    """
+    Process a single image and return the generated tags
+    
+    Args:
+        file: The image file to process
+        tag_mode: Tag writing mode ("append" or "overwrite")
+        save_mode: How to save the tagged file - "replace" (overwrite original) or "suffix" (create new file)
+    
+    Returns:
+        JSON response with tags and file info including output file path
+    """
+    # Save uploaded file to a temporary location
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    input_path = os.path.join(temp_dir, file.filename)
     with open(input_path, "wb") as buffer:
         buffer.write(await file.read())
     
@@ -45,24 +59,42 @@ async def process_single_image(file: UploadFile = File(...), tag_mode: str = "ap
     if result["success"]:
         # Write tags to file
         tags = result["tags"]
-        success = write_tags_to_file(input_path, tags, tag_mode)
+        success, output_path = write_tags_to_file(input_path, tags, tag_mode, save_mode)
         
-        # Return results
+        # Return results with output path information
         return {
             "success": success,
             "filename": file.filename,
+            "output_path": output_path,
             "tags": tags,
+            "save_mode": save_mode,
             "processing_time": result["processing_time"]
         }
     else:
         return JSONResponse(
-            status_code=400, 
+            status_code=400,
             content={"success": False, "error": result.get("error", "Unknown error")}
         )
 
 @app.post("/process/folder")
-async def process_folder(background_tasks: BackgroundTasks, path: str, recursive: bool = False):
-    """Start processing a folder in the background"""
+async def process_folder(
+    background_tasks: BackgroundTasks,
+    path: str,
+    recursive: bool = False,
+    save_mode: str = "replace"
+):
+    """
+    Start processing a folder in the background
+    
+    Args:
+        background_tasks: FastAPI background tasks
+        path: Path to the folder containing images
+        recursive: Whether to process subfolders recursively
+        save_mode: How to save the tagged files - "replace" (overwrite originals) or "suffix" (create new files)
+    
+    Returns:
+        JSON response with processing status
+    """
     if not os.path.exists(path):
         return JSONResponse(
             status_code=400,
@@ -72,11 +104,11 @@ async def process_folder(background_tasks: BackgroundTasks, path: str, recursive
     from utils import batch_process_folder
     
     # Add the processing task to background tasks
-    background_tasks.add_task(batch_process_folder, path, recursive)
+    background_tasks.add_task(batch_process_folder, path, recursive, save_mode=save_mode)
     
     return {
         "success": True,
-        "message": f"Started processing folder: {path} (recursive: {recursive})",
+        "message": f"Started processing folder: {path} (recursive: {recursive}, save_mode: {save_mode})",
         "status_endpoint": "/status"
     }
 

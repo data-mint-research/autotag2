@@ -3,6 +3,7 @@ import time
 import subprocess
 import logging
 import torch
+import shutil
 from typing import Dict, List, Any, Optional
 
 from models import get_clip_model, get_yolo_model
@@ -79,24 +80,37 @@ def generate_tags(clip_result, people_result):
     
     return tags
 
-def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append") -> bool:
+def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append", save_mode: str = "replace") -> tuple:
     """Write tags to image file using ExifTool
     
     Args:
         image_path: Path to the image file
         tags: List of tags to write
         mode: Tag writing mode ("append" or "overwrite")
+        save_mode: How to save the file ("replace" original or create "_tagged" suffix)
         
     Returns:
-        bool: True if successful, False otherwise
+        tuple: (bool, str) - (success status, output file path)
     """
     if not tags:
         logger.warning(f"No tags to write to {os.path.basename(image_path)}")
-        return True
+        return True, image_path
     
     try:
         # Format tags as a comma-separated list
         tag_list = ",".join(tags)
+        
+        # Determine the output path based on save_mode
+        if save_mode == "suffix":
+            # Create a new file with _tagged suffix
+            base_name, ext = os.path.splitext(image_path)
+            output_path = f"{base_name}_tagged{ext}"
+            
+            # Copy the original file
+            shutil.copy2(image_path, output_path)
+            target_path = output_path
+        else:  # replace
+            target_path = image_path
         
         # Build the ExifTool command
         if mode == "overwrite":
@@ -104,14 +118,14 @@ def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append") -
                 "exiftool",
                 f"-XMP-digiKam:TagsList={tag_list}",
                 "-overwrite_original",
-                image_path
+                target_path
             ]
         else:  # append
             cmd = [
                 "exiftool",
                 f"-XMP-digiKam:TagsList+={tag_list}",
                 "-overwrite_original",
-                image_path
+                target_path
             ]
         
         # Execute the command
@@ -120,11 +134,11 @@ def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append") -
         # Check the result
         if result.returncode != 0:
             logger.error(f"ExifTool error: {result.stderr}")
-            return False
+            return False, image_path
         
-        logger.info(f"Successfully wrote {len(tags)} tags to {os.path.basename(image_path)}")
-        return True
+        logger.info(f"Successfully wrote {len(tags)} tags to {os.path.basename(target_path)}")
+        return True, target_path
             
     except Exception as e:
         logger.error(f"Error writing tags to {image_path}: {e}")
-        return False
+        return False, image_path

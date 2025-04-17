@@ -9,26 +9,10 @@ param (
     [string]$Path = "",
     
     [switch]$Recursive,
+    [ValidateSet("replace", "suffix")]
+    [string]$SaveMode = "replace",
     [switch]$Help
 )
-
-# Create data directories if they don't exist
-$DataPath = Join-Path $PSScriptRoot "data"
-$InputPath = Join-Path $DataPath "input"
-$OutputPath = Join-Path $DataPath "output"
-
-if (-not (Test-Path $DataPath)) {
-    New-Item -ItemType Directory -Path $DataPath | Out-Null
-    Write-Host "Created data directory" -ForegroundColor Green
-}
-if (-not (Test-Path $InputPath)) {
-    New-Item -ItemType Directory -Path $InputPath | Out-Null
-    Write-Host "Created input directory" -ForegroundColor Green
-}
-if (-not (Test-Path $OutputPath)) {
-    New-Item -ItemType Directory -Path $OutputPath | Out-Null
-    Write-Host "Created output directory" -ForegroundColor Green
-}
 
 $AppVersion = "1.0.0"
 $ApiUrl = "http://localhost:8000"
@@ -44,6 +28,7 @@ function Show-Help {
     Write-Host "  .\start.ps1 stop                  # Stop AUTO-TAG service"
     Write-Host "`nOptions:`n"
     Write-Host "  -Recursive                        # Process folders recursively"
+    Write-Host "  -SaveMode <replace|suffix>        # Save mode: replace original files or create new ones with suffix (default: replace)"
     Write-Host "  -Help                             # Show this help"
 }
 
@@ -138,7 +123,8 @@ function Stop-AutoTagService {
 
 function Process-Image {
     param (
-        [string]$ImagePath
+        [string]$ImagePath,
+        [string]$SaveMode = "replace"
     )
     
     if (-not $ImagePath) {
@@ -192,7 +178,7 @@ function Process-Image {
             "Content-Type" = "multipart/form-data; boundary=$boundary"
         }
         
-        $response = Invoke-RestMethod -Uri "$ApiUrl/process/image" -Method POST -Body $body -Headers $headers
+        $response = Invoke-RestMethod -Uri "$ApiUrl/process/image?save_mode=$SaveMode" -Method POST -Body $body -Headers $headers
         
         # Display results
         Write-Host "`nSuccessfully processed image: $fileName" -ForegroundColor Green
@@ -211,7 +197,8 @@ function Process-Image {
 function Process-Folder {
     param (
         [string]$FolderPath,
-        [bool]$ProcessRecursively
+        [bool]$ProcessRecursively,
+        [string]$SaveMode = "replace"
     )
     
     if (-not $FolderPath) {
@@ -249,6 +236,7 @@ function Process-Folder {
         $params = @{
             path = $FolderPath
             recursive = $ProcessRecursively
+            save_mode = $SaveMode
         }
         
         $response = Invoke-RestMethod -Uri "$ApiUrl/process/folder" -Method POST -Body $params
@@ -331,10 +319,10 @@ if (-not (Test-DockerInstallation)) {
 # Process according to mode
 switch ($Mode) {
     "image" {
-        Process-Image -ImagePath $Path
+        Process-Image -ImagePath $Path -SaveMode $SaveMode
     }
     "folder" {
-        Process-Folder -FolderPath $Path -ProcessRecursively $Recursive
+        Process-Folder -FolderPath $Path -ProcessRecursively $Recursive -SaveMode $SaveMode
     }
     "status" {
         Get-ProcessingStatus
@@ -359,24 +347,37 @@ switch ($Mode) {
             Write-Host "`n1. Process single image"
             Write-Host "2. Process folder"
             Write-Host "3. Check processing status"
-            Write-Host "4. Stop service"
-            Write-Host "5. Exit"
+            Write-Host "4. Configure save mode (current: $SaveMode)"
+            Write-Host "5. Stop service"
+            Write-Host "6. Exit"
             
-            $choice = Read-Host "`nSelect an option (1-5)"
+            $choice = Read-Host "`nSelect an option (1-6)"
             
             switch ($choice) {
-                "1" { Process-Image }
-                "2" { Process-Folder -ProcessRecursively $false }
+                "1" { Process-Image -SaveMode $SaveMode }
+                "2" { Process-Folder -ProcessRecursively $false -SaveMode $SaveMode }
                 "3" { Get-ProcessingStatus }
-                "4" { Stop-AutoTagService; $running = $false }
-                "5" { $running = $false }
+                "4" {
+                    Write-Host "`nSelect save mode:" -ForegroundColor Cyan
+                    Write-Host "1. Replace original files"
+                    Write-Host "2. Create new files with '_tagged' suffix"
+                    $saveModeChoice = Read-Host "`nSelect an option (1-2)"
+                    
+                    switch ($saveModeChoice) {
+                        "1" { $SaveMode = "replace"; Write-Host "Save mode set to: replace original files" -ForegroundColor Green }
+                        "2" { $SaveMode = "suffix"; Write-Host "Save mode set to: create new files with suffix" -ForegroundColor Green }
+                        default { Write-Host "Invalid option. Save mode unchanged." -ForegroundColor Yellow }
+                    }
+                }
+                "5" { Stop-AutoTagService; $running = $false }
+                "6" { $running = $false }
                 default {
-                    Write-Host "`nInvalid option. Please select 1-5." -ForegroundColor Yellow
+                    Write-Host "`nInvalid option. Please select 1-6." -ForegroundColor Yellow
                     Start-Sleep -Seconds 1
                 }
             }
             
-            if ($running -and $choice -in 1..3) {
+            if ($running -and $choice -in 1..4) {
                 Write-Host "`nPress any key to continue..."
                 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
             }
