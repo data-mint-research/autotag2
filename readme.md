@@ -42,7 +42,7 @@ This Docker-based implementation offers a streamlined approach to automatic imag
 1. Clone this repository
 2. Download the models (one-time setup):
    ```
-   python download_models.py
+   python scripts/download-models.py
    ```
 3. Run the start script:
    ```
@@ -56,11 +56,11 @@ Before using AUTO-TAG, make sure you have:
 
 1. **Docker Desktop for Windows** installed and configured with NVIDIA Container Toolkit:
    ```
-   .\setup-nvidia-docker.ps1
+   .\scripts\setup-nvidia-docker.ps1
    ```
 2. Downloaded the AI models:
    ```
-   python download_models.py
+   python scripts/download-models.py
    ```
 
 Note: The necessary data directories will be automatically created when you run the start script.
@@ -81,11 +81,13 @@ AUTO-TAG/
 ├── data/                 # Data directories
 │   ├── input/            # Input images
 │   └── output/           # Output images
+├── scripts/              # Utility scripts
+│   ├── download-models.py # Model downloader
+│   └── setup-nvidia-docker.ps1 # NVIDIA Docker setup
 ├── Dockerfile            # Docker container definition
 ├── docker-compose.yml    # Container orchestration
 ├── config.yml            # Configuration file
 ├── requirements.txt      # Python dependencies
-├── download_models.py    # Model downloader
 ├── start.ps1             # PowerShell startup script
 └── README.md             # This file
 ```
@@ -133,7 +135,7 @@ The application uses Docker with NVIDIA GPU support for optimal performance. To 
 1. Install Docker Desktop for Windows
 2. Run the included NVIDIA Container Toolkit setup script:
    ```powershell
-   .\setup-nvidia-docker.ps1
+   .\scripts\setup-nvidia-docker.ps1
    ```
 3. After the script completes, restart Docker Desktop
 4. Verify the setup with:
