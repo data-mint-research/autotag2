@@ -54,7 +54,10 @@ This Docker-based implementation offers a streamlined approach to automatic imag
 
 Before using AUTO-TAG, make sure you have:
 
-1. **Docker Desktop for Windows** installed with NVIDIA Container Toolkit configured
+1. **Docker Desktop for Windows** installed and configured with NVIDIA Container Toolkit:
+   ```
+   .\setup-nvidia-docker.ps1
+   ```
 2. Downloaded the AI models:
    ```
    python download_models.py
@@ -125,14 +128,20 @@ These tags are written to the XMP-digiKam:TagsList field in the image metadata, 
 
 ## Docker Setup
 
-Make sure you have Docker Desktop for Windows installed with the NVIDIA Container Toolkit configured. The application uses a containerized approach for easy setup and deployment.
+The application uses Docker with NVIDIA GPU support for optimal performance. To set up:
 
-To verify that NVIDIA Docker support is working:
-```powershell
-docker run --rm --gpus all nvidia/cuda:12.0.1-base-ubuntu22.04 nvidia-smi
-```
+1. Install Docker Desktop for Windows
+2. Run the included NVIDIA Container Toolkit setup script:
+   ```powershell
+   .\setup-nvidia-docker.ps1
+   ```
+3. After the script completes, restart Docker Desktop
+4. Verify the setup with:
+   ```powershell
+   docker run --rm --gpus all nvidia/cuda:12.0.1-base-ubuntu22.04 nvidia-smi
+   ```
 
-You should see the output of `nvidia-smi` showing your GPU information.
+This script automatically configures Docker Desktop to work with your NVIDIA GPU, enabling the application to utilize GPU acceleration for faster image processing.
 
 ## API Endpoints
 
