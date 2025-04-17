@@ -55,14 +55,12 @@ This Docker-based implementation offers a streamlined approach to automatic imag
 Before using AUTO-TAG, make sure you have:
 
 1. **Docker Desktop for Windows** installed with NVIDIA Container Toolkit configured
-2. Created the required directories:
-   ```
-   mkdir -p data/input data/output
-   ```
-3. Downloaded the AI models:
+2. Downloaded the AI models:
    ```
    python download_models.py
    ```
+
+Note: The necessary data directories will be automatically created when you run the start script.
 
 ## Directory Structure
 

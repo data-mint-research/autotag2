@@ -12,6 +12,24 @@ param (
     [switch]$Help
 )
 
+# Create data directories if they don't exist
+$DataPath = Join-Path $PSScriptRoot "data"
+$InputPath = Join-Path $DataPath "input"
+$OutputPath = Join-Path $DataPath "output"
+
+if (-not (Test-Path $DataPath)) {
+    New-Item -ItemType Directory -Path $DataPath | Out-Null
+    Write-Host "Created data directory" -ForegroundColor Green
+}
+if (-not (Test-Path $InputPath)) {
+    New-Item -ItemType Directory -Path $InputPath | Out-Null
+    Write-Host "Created input directory" -ForegroundColor Green
+}
+if (-not (Test-Path $OutputPath)) {
+    New-Item -ItemType Directory -Path $OutputPath | Out-Null
+    Write-Host "Created output directory" -ForegroundColor Green
+}
+
 $AppVersion = "1.0.0"
 $ApiUrl = "http://localhost:8000"
 
