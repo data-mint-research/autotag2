@@ -61,6 +61,7 @@ data/
 # IDE settings
 .idea/
 .vscode/
+.roomodes
 *.swp
 *.swo
 
