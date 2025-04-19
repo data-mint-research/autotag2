@@ -5,6 +5,9 @@ import numpy as np
 from typing import Dict, Tuple, Optional
 import logging
 
+# Konfiguration laden
+from config import get_config
+
 logger = logging.getLogger('auto-tag')
 
 # Predefined categories for classification
@@ -17,12 +20,13 @@ class CLIPModel:
     
     def __init__(self):
         """Initialize CLIP model"""
+        config = get_config()
         self.model = None
         self.preprocess = None
         self.tokenizer = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model_path = "/app/models/clip/clip_vit_b32.pth"
-        self.model_architecture = "ViT-B-32"
+        self.device = "cuda" if config["hardware"]["use_gpu"] and torch.cuda.is_available() else "cpu"
+        self.model_path = config["models"]["clip"]["path"]
+        self.model_architecture = config["models"]["clip"]["architecture"]
         self.initialized = False
     
     def initialize(self):
@@ -37,8 +41,14 @@ class CLIPModel:
             # Load model and transformer
             self.model, _, self.preprocess = open_clip.create_model_and_transforms(
                 self.model_architecture,
-                pretrained=self.model_path
+                pretrained=False
             )
+            
+            # Manuelles Laden der Modellgewichte
+            logger.info(f"Lade CLIP-Modell aus: {self.model_path}")
+            state_dict = torch.load(self.model_path, map_location=self.device)
+            self.model.load_state_dict(state_dict)
+            
             self.model = self.model.to(self.device).eval()
             
             # Load tokenizer
@@ -48,7 +58,7 @@ class CLIPModel:
             logger.info(f"CLIP model successfully initialized on {self.device}")
             return True
         except Exception as e:
-            logger.error(f"Error initializing CLIP model: {e}")
+            logger.error(f"Error initializing CLIP model: {e}", exc_info=True)
             return False
     
     def analyze(self, image_path: str) -> Dict[str, Tuple[str, float]]:
@@ -59,14 +69,15 @@ class CLIPModel:
                 return {}
         
         try:
-            # Load and prepare image
-            image = Image.open(image_path).convert("RGB")
-            image_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
-            
-            # Classify scene, room type, and clothing
-            scene = self._classify(image_tensor, SCENE_CATEGORIES)[0]
-            room = self._classify(image_tensor, ROOMTYPES)[0]
-            clothing = self._classify(image_tensor, CLOTHING)[0]
+            # Load and prepare image with proper resource management
+            with Image.open(image_path) as image:
+                image_rgb = image.convert("RGB")
+                image_tensor = self.preprocess(image_rgb).unsqueeze(0).to(self.device)
+                
+                # Classify scene, room type, and clothing
+                scene = self._classify(image_tensor, SCENE_CATEGORIES)[0]
+                room = self._classify(image_tensor, ROOMTYPES)[0]
+                clothing = self._classify(image_tensor, CLOTHING)[0]
             
             return {
                 "scene": scene,
@@ -74,7 +85,7 @@ class CLIPModel:
                 "clothing": clothing
             }
         except Exception as e:
-            logger.error(f"Error analyzing image: {e}")
+            logger.error(f"Error analyzing image: {e}", exc_info=True)
             return {}
     
     def _classify(self, image_tensor, label_list, topk=1):
@@ -106,11 +117,12 @@ class YOLOModel:
     
     def __init__(self):
         """Initialize YOLOv8 model"""
+        config = get_config()
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model_path = "/app/models/yolov8/yolov8n.pt"
+        self.device = "cuda" if config["hardware"]["use_gpu"] and torch.cuda.is_available() else "cpu"
+        self.model_path = config["models"]["yolo"]["path"]
         self.initialized = False
-        self.min_person_height = 40  # Minimum height for detecting a person
+        self.min_person_height = config["models"]["yolo"]["min_person_height"]
     
     def initialize(self):
         """Initialize the model"""
@@ -128,7 +140,7 @@ class YOLOModel:
             logger.info(f"YOLOv8 model successfully initialized")
             return True
         except Exception as e:
-            logger.error(f"Error initializing YOLOv8 model: {e}")
+            logger.error(f"Error initializing YOLOv8 model: {e}", exc_info=True)
             return False
     
     def count_people(self, image_path: str) -> str:
@@ -163,7 +175,7 @@ class YOLOModel:
                 return "group"
                 
         except Exception as e:
-            logger.error(f"Error counting people in {image_path}: {e}")
+            logger.error(f"Error counting people in {image_path}: {e}", exc_info=True)
             return "none"
 
 # Singleton instances

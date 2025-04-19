@@ -13,6 +13,7 @@ import hashlib
 from pathlib import Path
 from tqdm import tqdm
 import argparse
+import time
 
 # Model URLs and information
 MODELS = {
@@ -39,44 +40,70 @@ def calculate_sha256(file_path):
     """Calculate SHA-256 hash of a file"""
     sha256_hash = hashlib.sha256()
     with open(file_path, "rb") as f:
-        # Read in 1MB chunks
-        for byte_block in iter(lambda: f.read(4096), b""):
+        # Read in 1MB chunks for better efficiency
+        for byte_block in iter(lambda: f.read(1024*1024), b""):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-def download_file(url, destination, expected_size=None):
-    """Download a file with progress bar"""
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        
-        # Get file size for progress bar
-        total_size = int(response.headers.get('content-length', 0))
-        if not total_size and expected_size:
-            total_size = expected_size
-        
-        # Create parent directory if it doesn't exist
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        
-        # Download with progress bar
-        with open(destination, 'wb') as f, tqdm(
-            total=total_size,
-            unit='B',
-            unit_scale=True,
-            unit_divisor=1024,
-            desc=os.path.basename(destination)
-        ) as bar:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-                    bar.update(len(chunk))
-        
-        return True
-    except Exception as e:
-        print(f"Error downloading {url}: {e}")
-        if os.path.exists(destination):
-            os.remove(destination)
-        return False
+def download_file(url, destination, expected_size=None, max_retries=3, backup_url=None):
+    """Download a file with progress bar and retry mechanism"""
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, stream=True, timeout=30)  # Timeout hinzugefügt
+            response.raise_for_status()
+            
+            # Get file size for progress bar
+            total_size = int(response.headers.get('content-length', 0))
+            if not total_size and expected_size:
+                total_size = expected_size
+            
+            # Create parent directory if it doesn't exist
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            
+            # Download with progress bar
+            with open(destination, 'wb') as f, tqdm(
+                total=total_size,
+                unit='B',
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=os.path.basename(destination)
+            ) as bar:
+                for chunk in response.iter_content(chunk_size=8192):  # Größere Chunks für Effizienz
+                    if chunk:
+                        f.write(chunk)
+                        bar.update(len(chunk))
+            
+            return True
+        except (requests.RequestException, IOError) as e:
+            wait_time = 2 ** attempt  # Exponentieller Backoff
+            print(f"Download attempt {attempt+1}/{max_retries} failed: {str(e)}")
+            print(f"Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+    
+    # Versuche Backup-URL, falls vorhanden
+    if backup_url:
+        print(f"Trying backup URL: {backup_url}")
+        try:
+            response = requests.get(backup_url, stream=True, timeout=30)
+            response.raise_for_status()
+            
+            with open(destination, 'wb') as f, tqdm(
+                unit='B',
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=os.path.basename(destination)
+            ) as bar:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        bar.update(len(chunk))
+            return True
+        except Exception as e:
+            print(f"Backup download failed: {e}")
+    
+    if os.path.exists(destination):
+        os.remove(destination)
+    return False
 
 def verify_model(file_path, expected_hash):
     """Verify the hash of a downloaded model file"""
@@ -122,14 +149,14 @@ def download_models(output_dir):
         
         # Download the model
         print(f"Downloading {model_name} model...")
-        download_success = download_file(model_info["url"], dest_path, model_info.get("size"))
+        download_success = download_file(
+            model_info["url"], 
+            dest_path, 
+            model_info.get("size"),
+            backup_url=model_info.get("backup_url")
+        )
         
         # Check if download was successful
-        if not download_success:
-            if "backup_url" in model_info:
-                print(f"Trying backup URL for {model_name}...")
-                download_success = download_file(model_info["backup_url"], dest_path, model_info.get("size"))
-            
         if not download_success:
             print(f"Failed to download {model_name} model")
             success = False

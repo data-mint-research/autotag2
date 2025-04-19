@@ -10,6 +10,20 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - CUDA_VISIBLE_DEVICES=0
+      # AUTO-TAG spezifische Umgebungsvariablen
+      - AUTOTAG_INPUT_DIR=/app/data/input
+      - AUTOTAG_OUTPUT_DIR=/app/data/output
+      - AUTOTAG_MODELS_DIR=/app/models
+      - AUTOTAG_USE_GPU=true
+      - AUTOTAG_EXIFTOOL_TIMEOUT=30
+    volumes:
+      # Persistente Datenspeicherung
+      - ./data/input:/app/data/input
+      - ./data/output:/app/data/output
+      # Konfigurationsdatei
+      - ./config.yml:/app/config.yml
+      # Logverzeichnis
+      - ./logs:/app/logs
     deploy:
       resources:
         reservations:

@@ -4,11 +4,54 @@ import subprocess
 import logging
 import torch
 import shutil
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 
 from models import get_clip_model, get_yolo_model
+from config import get_config
 
 logger = logging.getLogger('auto-tag')
+
+def validate_image(file_content: bytes, filename: str) -> Tuple[bool, str]:
+    """
+    Validiert, ob die Datei ein gültiges Bild in einem unterstützten Format ist.
+    
+    Args:
+        file_content: Binäre Daten des Bildes
+        filename: Name der Datei
+        
+    Returns:
+        Tuple[bool, str]: (Ist gültig, Fehlermeldung falls ungültig)
+    """
+    # 1. Dateierweiterung prüfen
+    valid_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'}
+    file_ext = os.path.splitext(filename.lower())[1]
+    if file_ext not in valid_extensions:
+        return False, f"Ungültiges Dateiformat: {file_ext}. Erlaubte Formate: JPG, JPEG, PNG, GIF, BMP, TIFF, WEBP."
+    
+    # 2 & 5. Dateiintegrität und Format prüfen
+    try:
+        from io import BytesIO
+        from PIL import Image, UnidentifiedImageError
+        
+        # Versuchen, das Bild zu öffnen
+        try:
+            with Image.open(BytesIO(file_content)) as image:
+                # Unterstützte Formate
+                supported_formats = {'JPEG', 'PNG', 'GIF', 'BMP', 'TIFF', 'WEBP'}
+                
+                # Format überprüfen
+                if image.format not in supported_formats:
+                    return False, f"Bildformat nicht unterstützt: {image.format}. Unterstützte Formate: {', '.join(supported_formats)}."
+                
+                # Erzwinge das Laden des Bildes, um sicherzustellen, dass es gültig ist
+                image.load()
+                
+                return True, ""
+        except UnidentifiedImageError:
+            return False, "Die Datei konnte nicht als Bild identifiziert werden."
+            
+    except Exception as e:
+        return False, f"Ungültiges oder beschädigtes Bild: {str(e)}"
 
 def process_image(image_path: str) -> Dict[str, Any]:
     """Process a single image
@@ -27,6 +70,15 @@ def process_image(image_path: str) -> Dict[str, Any]:
     start_time = time.time()
     
     try:
+        # Verify image integrity
+        with open(image_path, 'rb') as f:
+            file_content = f.read()
+        
+        is_valid, error_message = validate_image(file_content, os.path.basename(image_path))
+        if not is_valid:
+            logger.error(f"Invalid image: {error_message}")
+            return {"success": False, "error": error_message}
+        
         # Get models
         clip_model = get_clip_model()
         yolo_model = get_yolo_model()
@@ -52,7 +104,7 @@ def process_image(image_path: str) -> Dict[str, Any]:
             "processing_time": processing_time
         }
     except Exception as e:
-        logger.error(f"Error processing image: {e}")
+        logger.error(f"Error processing image: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 def generate_tags(clip_result, people_result):
@@ -80,7 +132,7 @@ def generate_tags(clip_result, people_result):
     
     return tags
 
-def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append", save_mode: str = "replace") -> tuple:
+def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append", save_mode: str = "replace", timeout: int = 30) -> Tuple[bool, str]:
     """Write tags to image file using ExifTool
     
     Args:
@@ -88,10 +140,14 @@ def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append", s
         tags: List of tags to write
         mode: Tag writing mode ("append" or "overwrite")
         save_mode: How to save the file ("replace" original or create "_tagged" suffix)
+        timeout: Timeout in seconds for the exiftool process
         
     Returns:
-        tuple: (bool, str) - (success status, output file path)
+        Tuple[bool, str]: (success status, output file path)
     """
+    config = get_config()
+    timeout = config.get("tagging", {}).get("exiftool_timeout", 30)
+    
     if not tags:
         logger.warning(f"No tags to write to {os.path.basename(image_path)}")
         return True, image_path
@@ -128,8 +184,8 @@ def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append", s
                 target_path
             ]
         
-        # Execute the command
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        # Execute the command with timeout
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=timeout)
         
         # Check the result
         if result.returncode != 0:
@@ -139,6 +195,9 @@ def write_tags_to_file(image_path: str, tags: List[str], mode: str = "append", s
         logger.info(f"Successfully wrote {len(tags)} tags to {os.path.basename(target_path)}")
         return True, target_path
             
+    except subprocess.TimeoutExpired:
+        logger.error(f"ExifTool process timed out after {timeout} seconds for {image_path}")
+        return False, image_path
     except Exception as e:
-        logger.error(f"Error writing tags to {image_path}: {e}")
+        logger.error(f"Error writing tags to {image_path}: {e}", exc_info=True)
         return False, image_path
